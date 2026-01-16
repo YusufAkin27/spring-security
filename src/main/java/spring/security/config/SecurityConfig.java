@@ -21,8 +21,9 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import spring.security.auth.repository.TokenBlacklistRepository;
-import spring.security.security.jwt.JwtAuthenticationFilter;
-import spring.security.security.jwt.JwtService;
+import spring.security.jwt.JwtAuthenticationFilter;
+import spring.security.jwt.JwtService;
+
 
 import java.util.Arrays;
 import java.util.List;
@@ -41,8 +42,7 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(
             HttpSecurity http,
             SecurityHeadersFilter securityHeadersFilter,
-            JwtAuthenticationFilter jwtAuthenticationFilter
-    ) throws Exception {
+            JwtAuthenticationFilter jwtAuthenticationFilter) throws Exception {
         http
                 .csrf(AbstractHttpConfigurer::disable)
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))

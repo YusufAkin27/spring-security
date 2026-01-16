@@ -29,6 +29,13 @@ public class RateLimitService {
     private final Map<String, AttemptRecord> loginAttempts = new ConcurrentHashMap<>();
     private final Map<String, AttemptRecord> refreshAttempts = new ConcurrentHashMap<>();
 
+    /**
+     * Rate limit aşılıp aşılmadığını kontrol eder.
+     * 
+     * @param identifier IP adresi veya kullanıcı tanımlayıcısı
+     * @param endpoint Endpoint adı (login, refresh)
+     * @return Rate limit aşıldıysa true
+     */
     public boolean isRateLimitExceeded(String identifier, String endpoint) {
         Map<String, AttemptRecord> attemptsMap;
         int maxAttempts;
@@ -43,7 +50,7 @@ public class RateLimitService {
             maxAttempts = refreshMaxAttempts;
             windowMinutes = refreshWindowMinutes;
         } else {
-            log.warn("Unknown endpoint for rate limiting: {}", endpoint);
+            log.warn("Rate limiting için bilinmeyen endpoint: {}", endpoint);
             return false;
         }
 
@@ -61,7 +68,7 @@ public class RateLimitService {
         }
 
         if (record.getAttemptCount() >= maxAttempts) {
-            log.warn("Rate limit exceeded for {}: {} attempts in {} minutes", 
+            log.warn("Rate limit aşıldı, {}: {} deneme {} dakika içinde", 
                     identifier, record.getAttemptCount(), windowMinutes);
             return true;
         }
@@ -69,6 +76,12 @@ public class RateLimitService {
         return false;
     }
 
+    /**
+     * Deneme kaydı yapar.
+     * 
+     * @param identifier IP adresi veya kullanıcı tanımlayıcısı
+     * @param endpoint Endpoint adı
+     */
     public void recordAttempt(String identifier, String endpoint) {
         Map<String, AttemptRecord> attemptsMap;
 
@@ -99,6 +112,12 @@ public class RateLimitService {
         }
     }
 
+    /**
+     * Deneme kayıtlarını temizler (başarılı işlem sonrası).
+     * 
+     * @param identifier IP adresi veya kullanıcı tanımlayıcısı
+     * @param endpoint Endpoint adı
+     */
     public void clearAttempts(String identifier, String endpoint) {
         Map<String, AttemptRecord> attemptsMap;
 
@@ -111,9 +130,13 @@ public class RateLimitService {
         }
 
         attemptsMap.remove(identifier);
-        log.debug("Rate limit cleared for {}: {}", identifier, endpoint);
+        log.debug("Rate limit temizlendi, {}: {}", identifier, endpoint);
     }
 
+    /**
+     * Eski rate limit kayıtlarını temizler (1 saatten eski).
+     * Her 5 dakikada bir otomatik çalışır.
+     */
     @Scheduled(fixedRate = 300000)
     public void cleanupOldRecords() {
         LocalDateTime cutoff = LocalDateTime.now().minusHours(1);
@@ -122,7 +145,7 @@ public class RateLimitService {
         int refreshCleaned = cleanupMap(refreshAttempts, cutoff);
         
         if (loginCleaned > 0 || refreshCleaned > 0) {
-            log.debug("Rate limit cleanup: {} login records, {} refresh records removed", 
+            log.debug("Rate limit temizliği: {} login kaydı, {} refresh kaydı silindi", 
                     loginCleaned, refreshCleaned);
         }
     }

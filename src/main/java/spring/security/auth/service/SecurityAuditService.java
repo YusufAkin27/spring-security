@@ -18,6 +18,12 @@ public class SecurityAuditService {
 
     private final SecurityAuditRepository auditRepository;
 
+    /**
+     * Güvenlik olayını audit log'a kaydeder.
+     * Başarılı ve başarısız olayları loglar ve veritabanına kaydeder.
+     * 
+     * @param event Güvenlik olayı bilgileri
+     */
     @Transactional
     public void logEvent(SecurityEvent event) {
         try {
@@ -36,14 +42,14 @@ public class SecurityAuditService {
             auditRepository.save(auditLog);
 
             if (event.isSuccess()) {
-                log.info("Security event logged: {} for user: {} from IP: {}", 
+                log.info("Güvenlik olayı kaydedildi: {} - kullanıcı: {} - IP: {}", 
                         event.getEventType(), event.getUsername(), event.getIpAddress());
             } else {
-                log.warn("Security event logged (FAILED): {} for user: {} from IP: {}, reason: {}", 
+                log.warn("Güvenlik olayı kaydedildi (BAŞARISIZ): {} - kullanıcı: {} - IP: {} - sebep: {}", 
                         event.getEventType(), event.getUsername(), event.getIpAddress(), event.getFailureReason());
             }
         } catch (Exception e) {
-            log.error("Failed to log security event: {}", e.getMessage(), e);
+            log.error("Güvenlik olayı kaydedilemedi: {}", e.getMessage(), e);
         }
     }
 

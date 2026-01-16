@@ -1,5 +1,4 @@
-package spring.security.security.jwt;
-
+package spring.security.jwt;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -25,12 +24,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final UserDetailsService userDetailsService;
     private final TokenBlacklistRepository tokenBlacklistRepository;
 
+    /**
+     * JWT token'ı kontrol eder ve kullanıcıyı authenticate eder.
+     * Authorization header'ından Bearer token'ı alır, doğrular ve SecurityContext'e ekler.
+     * Blacklist kontrolü yapar.
+     * 
+     * @param request HTTP istek nesnesi
+     * @param response HTTP yanıt nesnesi
+     * @param filterChain Filter zinciri
+     */
     @Override
-    protected void doFilterInternal(
-            @NonNull HttpServletRequest request,
-            @NonNull HttpServletResponse response,
-            @NonNull FilterChain filterChain
-    ) throws ServletException, IOException {
+    protected void doFilterInternal(@NonNull HttpServletRequest request, @NonNull HttpServletResponse response, @NonNull FilterChain filterChain) throws ServletException, IOException {
         
         final String authHeader = request.getHeader("Authorization");
         
@@ -45,7 +49,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             final String jti = jwtService.extractJti(jwt);
             
             if (tokenBlacklistRepository.existsByJti(jti)) {
-                log.warn("Token is blacklisted: {}", jti);
+                log.warn("Token blacklist'te: {}", jti);
                 filterChain.doFilter(request, response);
                 return;
             }
@@ -68,13 +72,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     
                     SecurityContextHolder.getContext().setAuthentication(authToken);
                     
-                    log.debug("User authenticated: {}", username);
+                    log.debug("Kullanıcı authenticate edildi: {}", username);
                 }
             }
         } catch (Exception e) {
-            log.error("JWT authentication failed", e);
+            log.error("JWT authentication başarısız", e);
         }
-
         filterChain.doFilter(request, response);
     }
 }

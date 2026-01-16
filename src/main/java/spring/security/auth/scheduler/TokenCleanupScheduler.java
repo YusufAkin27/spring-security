@@ -24,9 +24,14 @@ public class TokenCleanupScheduler {
     private final RefreshTokenService refreshTokenService;
     private final TokenBlacklistRepository tokenBlacklistRepository;
 
+    /**
+     * Süresi dolmuş token'ları temizler.
+     * Refresh token'ları ve blacklist'teki token'ları siler.
+     * Cron expression ile belirlenen zamanda otomatik çalışır (varsayılan: her gün saat 02:00).
+     */
     @Scheduled(cron = "${jwt.token-cleanup-cron:0 0 2 * * ?}")
     public void cleanupExpiredTokens() {
-        log.info("Starting token cleanup job...");
+        log.info("Token temizleme işi başlatılıyor...");
         
         LocalDateTime now = LocalDateTime.now();
         
@@ -34,7 +39,7 @@ public class TokenCleanupScheduler {
             refreshTokenService.cleanupExpiredTokens();
             tokenBlacklistRepository.deleteByExpiresAtBefore(now);
         } catch (Exception e) {
-            log.error("Error during token cleanup", e);
+            log.error("Token temizleme sırasında hata oluştu", e);
         }
     }
 }

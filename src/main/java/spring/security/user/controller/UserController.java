@@ -22,6 +22,13 @@ public class UserController {
 
 
 
+    /**
+     * Kullanıcının profil bilgilerini getirir.
+     * Authentication'dan email alır ve kullanıcı bilgilerini döner.
+     * 
+     * @param authentication Spring Security authentication nesnesi
+     * @return Kullanıcı profil bilgileri
+     */
     @GetMapping("/profile")
     public ResponseEntity<ApiResponse<UserResponse>> getProfile(Authentication authentication) {
         String email = authentication.getName();

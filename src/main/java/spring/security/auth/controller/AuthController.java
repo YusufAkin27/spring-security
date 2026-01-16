@@ -22,7 +22,7 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import spring.security.dto.ApiResponse;
 import spring.security.auth.service.*;
 import spring.security.auth.entity.EmailVerification;
-import spring.security.security.jwt.JwtService;
+import spring.security.jwt.JwtService;
 import spring.security.user.entity.User;
 import spring.security.user.repository.UserRepository;
 
@@ -42,6 +42,16 @@ public class AuthController {
     private final RefreshTokenService refreshTokenService;
     private final SecurityAuditService securityAuditService;
 
+    /**
+     * Yeni kullanıcı kaydı yapar.
+     * Kullanıcı bilgilerini alır, cihaz ve IP bilgilerini çıkarır,
+     * kullanıcıyı kaydeder ve email doğrulama kodu gönderir.
+     * 
+     * @param request Kayıt isteği (email, password)
+     * @param httpRequest HTTP istek nesnesi
+     * @param httpResponse HTTP yanıt nesnesi
+     * @return Kayıt başarılı yanıtı (email doğrulama gerekli)
+     */
     @PostMapping("/register")
     public ResponseEntity<ApiResponse<AuthResponse>> register(
             @Valid @RequestBody RegisterRequest request,
@@ -66,6 +76,16 @@ public class AuthController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
+    /**
+     * Kullanıcı girişi yapar.
+     * Email ve şifre doğrulaması yapar, cihaz/IP değişikliği kontrolü yapar,
+     * gerekirse email doğrulama kodu gönderir veya token oluşturur.
+     * 
+     * @param request Giriş isteği (email, password)
+     * @param httpRequest HTTP istek nesnesi
+     * @param httpResponse HTTP yanıt nesnesi
+     * @return Giriş başarılı yanıtı veya doğrulama gerekli yanıtı
+     */
     @PostMapping("/login")
     public ResponseEntity<ApiResponse<AuthResponse>> login(
             @Valid @RequestBody LoginRequest request,
@@ -102,6 +122,15 @@ public class AuthController {
         return ResponseEntity.ok(response);
     }
 
+    /**
+     * Access token'ı yeniler.
+     * Cookie'den refresh token alır, doğrular ve yeni access/refresh token çifti oluşturur.
+     * Eski token'ları blacklist'e ekler ve token rotasyonu yapar.
+     * 
+     * @param httpRequest HTTP istek nesnesi
+     * @param httpResponse HTTP yanıt nesnesi
+     * @return Yeni token'lar ile başarılı yanıt
+     */
     @PostMapping("/refresh-token")
     public ResponseEntity<ApiResponse<AuthResponse>> refreshToken(
             HttpServletRequest httpRequest,
@@ -129,6 +158,15 @@ public class AuthController {
         return ResponseEntity.ok(response);
     }
 
+    /**
+     * Kullanıcı çıkışı yapar.
+     * Access token'ı blacklist'e ekler, refresh token'ı siler ve cookie'yi temizler.
+     * 
+     * @param authentication Spring Security authentication nesnesi
+     * @param httpRequest HTTP istek nesnesi
+     * @param httpResponse HTTP yanıt nesnesi
+     * @return Çıkış başarılı yanıtı
+     */
     @PostMapping("/logout")
     public ResponseEntity<ApiResponse<Object>> logout(
             Authentication authentication,
@@ -156,6 +194,16 @@ public class AuthController {
         return ResponseEntity.ok(response);
     }
 
+    /**
+     * Email doğrulama kodunu kontrol eder ve doğrular.
+     * Kayıt veya giriş doğrulaması için kullanılır.
+     * Doğrulama başarılı olursa kullanıcıyı aktif eder ve token oluşturur.
+     * 
+     * @param request Doğrulama kodu içeren istek
+     * @param httpRequest HTTP istek nesnesi
+     * @param httpResponse HTTP yanıt nesnesi
+     * @return Doğrulama başarılı yanıtı (token'lar ile)
+     */
     @PostMapping("/verify-email")
     public ResponseEntity<ApiResponse<AuthResponse>> verifyEmail(
             @Valid @RequestBody EmailVerificationRequest request,
@@ -254,6 +302,14 @@ public class AuthController {
         throw new spring.security.exception.security.InvalidTokenException("Invalid verification type");
     }
 
+    /**
+     * Email doğrulama kodunu yeniden gönderir.
+     * Body veya query parametresinden email alır ve yeni doğrulama kodu oluşturur.
+     * 
+     * @param requestBody İsteğin body'si (opsiyonel, email içerebilir)
+     * @param httpRequest HTTP istek nesnesi
+     * @return Doğrulama kodu gönderildi yanıtı
+     */
     @PostMapping("/resend-verification")
     public ResponseEntity<ApiResponse<Object>> resendVerification(
             @RequestBody(required = false) java.util.Map<String, String> requestBody,

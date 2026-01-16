@@ -11,7 +11,7 @@ import spring.security.auth.repository.RefreshTokenRepository;
 import spring.security.exception.security.InvalidTokenException;
 import spring.security.exception.security.TokenExpiredException;
 import spring.security.exception.security.TokenRevokedException;
-import spring.security.security.jwt.JwtService;
+import spring.security.jwt.JwtService;
 import spring.security.user.entity.User;
 
 import java.time.LocalDateTime;
@@ -32,6 +32,16 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
     @Value("${jwt.refresh-token-expiration}")
     private long refreshTokenExpiration;
 
+    /**
+     * Yeni refresh token oluşturur ve kaydeder.
+     * Kullanıcının mevcut refresh token'ı varsa önce silinir.
+     * 
+     * @param user Kullanıcı
+     * @param deviceInfo Cihaz bilgisi
+     * @param deviceId Cihaz ID'si
+     * @param ipAddress IP adresi
+     * @return Oluşturulan refresh token
+     */
     @Override
     @Transactional
     public String issueRefreshToken(User user, String deviceInfo, String deviceId, String ipAddress) {
@@ -39,7 +49,7 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
         if (existingToken.isPresent()) {
             refreshTokenRepository.delete(existingToken.get());
             entityManager.flush();
-            log.debug("Old refresh token deleted for user: {}, old jti: {}", 
+            log.debug("Eski refresh token silindi, kullanıcı: {}, eski jti: {}", 
                     user.getUsername(), existingToken.get().getJti());
         }
 
@@ -70,12 +80,21 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
         refreshToken.setAccessTokenJti(null);
 
         refreshTokenRepository.save(refreshToken);
-        log.debug("Refresh token created for user: {}, jti: {}, deviceId: {}, ipAddress: {}", 
+        log.debug("Refresh token oluşturuldu, kullanıcı: {}, jti: {}, deviceId: {}, ipAddress: {}", 
                 user.getUsername(), jti, deviceId, ipAddress);
 
         return rawToken;
     }
 
+    /**
+     * Refresh token'ı doğrular.
+     * Token'ın geçerliliğini, süresini, cihaz/IP uyumunu kontrol eder.
+     * 
+     * @param token Refresh token
+     * @param currentDeviceId Mevcut cihaz ID'si
+     * @param currentIpAddress Mevcut IP adresi
+     * @return Doğrulanmış refresh token entity
+     */
     @Override
     @Transactional
     public RefreshToken validateRefreshToken(String token, String currentDeviceId, String currentIpAddress) {
@@ -108,7 +127,7 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
             }
 
             if (!refreshToken.getDeviceId().equals(currentDeviceId)) {
-                log.error("Device mismatch detected for user: {}, expected: {}, got: {}", 
+                log.error("Cihaz uyuşmazlığı tespit edildi, kullanıcı: {}, beklenen: {}, gelen: {}", 
                         refreshToken.getUser().getUsername(), refreshToken.getDeviceId(), currentDeviceId);
                 
                 refreshToken.setRevoked(true);
@@ -130,7 +149,7 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
             }
 
             if (!ipControlService.validateIpChange(refreshToken.getIpAddress(), currentIpAddress)) {
-                log.error("IP mismatch detected for user: {}, original: {}, current: {}", 
+                log.error("IP uyuşmazlığı tespit edildi, kullanıcı: {}, orijinal: {}, mevcut: {}", 
                         refreshToken.getUser().getUsername(), refreshToken.getIpAddress(), currentIpAddress);
                 
                 refreshToken.setRevoked(true);
@@ -166,22 +185,32 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
         }
     }
 
+    /**
+     * Refresh token'ı iptal eder (revoke).
+     * 
+     * @param jti Token JTI'si
+     */
     @Override
     @Transactional
     public void revokeRefreshToken(String jti) {
         refreshTokenRepository.findByJti(jti).ifPresent(token -> {
             token.setRevoked(true);
             refreshTokenRepository.save(token);
-            log.debug("Refresh token revoked: {}", jti);
+            log.debug("Refresh token iptal edildi: {}", jti);
         });
     }
 
+    /**
+     * Kullanıcının refresh token'ını siler.
+     * 
+     * @param user Kullanıcı
+     */
     @Override
     @Transactional
     public void deleteByUser(User user) {
         refreshTokenRepository.findByUser(user).ifPresent(token -> {
             refreshTokenRepository.delete(token);
-            log.info("Refresh token deleted for user: {}, jti: {}", 
+            log.info("Refresh token silindi, kullanıcı: {}, jti: {}", 
                     user.getUsername(), token.getJti());
         });
     }
@@ -192,23 +221,32 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
         return refreshTokenRepository.findByUser(user);
     }
 
+    /**
+     * Refresh token'a bağlı access token JTI'sini günceller.
+     * 
+     * @param refreshTokenJti Refresh token JTI'si
+     * @param accessTokenJti Access token JTI'si
+     */
     @Override
     @Transactional
     public void updateAccessTokenJti(String refreshTokenJti, String accessTokenJti) {
         refreshTokenRepository.findByJti(refreshTokenJti).ifPresent(token -> {
             token.setAccessTokenJti(accessTokenJti);
             refreshTokenRepository.save(token);
-            log.debug("Access token JTI updated for refresh token: {}, accessTokenJti: {}", 
+            log.debug("Access token JTI güncellendi, refresh token: {}, accessTokenJti: {}", 
                     refreshTokenJti, accessTokenJti);
         });
     }
 
+    /**
+     * Süresi dolmuş refresh token'ları temizler.
+     */
     @Override
     @Transactional
     public void cleanupExpiredTokens() {
         LocalDateTime now = LocalDateTime.now();
         long deletedCount = refreshTokenRepository.count();
         refreshTokenRepository.deleteByExpiresAtBefore(now);
-        log.info("Cleaned up {} expired refresh tokens", deletedCount);
+        log.info("{} adet süresi dolmuş refresh token temizlendi", deletedCount);
     }
 }

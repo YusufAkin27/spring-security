@@ -19,7 +19,7 @@ import spring.security.auth.repository.TokenBlacklistRepository;
 import spring.security.exception.security.InvalidCredentialsException;
 import spring.security.exception.security.InvalidTokenException;
 import spring.security.exception.security.UsernameAlreadyExistsException;
-import spring.security.security.jwt.JwtService;
+import spring.security.jwt.JwtService;
 import spring.security.user.entity.Role;
 import spring.security.user.entity.User;
 import spring.security.user.repository.UserRepository;
@@ -45,6 +45,17 @@ public class AuthServiceImpl implements AuthService {
     private final EmailVerificationService emailVerificationService;
     private final IpControlService ipControlService;
 
+    /**
+     * Yeni kullanıcı kaydı yapar.
+     * Email kontrolü yapar, şifreyi hashler, kullanıcıyı kaydeder ve email doğrulama kodu gönderir.
+     * Eğer kullanıcı zaten varsa ama doğrulanmamışsa, şifreyi günceller ve yeni doğrulama kodu gönderir.
+     * 
+     * @param request Kayıt isteği
+     * @param deviceId Cihaz ID'si
+     * @param ipAddress IP adresi
+     * @param deviceInfo Cihaz bilgisi
+     * @return AuthResponse (token'lar null, email doğrulama gerekli)
+     */
     @Override
     @Transactional
     public AuthResponse register(RegisterRequest request, String deviceId, String ipAddress, String deviceInfo) {
@@ -83,7 +94,7 @@ public class AuthServiceImpl implements AuthService {
                     .details("Verification code resent for unverified email")
                     .build());
             
-            log.info("Verification code resent for unverified user: {}", savedUser.getEmail());
+            log.info("Doğrulanmamış kullanıcı için doğrulama kodu yeniden gönderildi: {}", savedUser.getEmail());
             
             return AuthResponse.builder()
                     .accessToken(null)
@@ -101,7 +112,7 @@ public class AuthServiceImpl implements AuthService {
         user.setEmailVerified(false);
 
         User savedUser = userRepository.save(user);
-        log.info("User registered: {}", savedUser.getEmail());
+        log.info("Kullanıcı kaydedildi: {}", savedUser.getEmail());
 
         emailVerificationService.generateAndSendVerificationCode(savedUser, "REGISTRATION", ipAddress, deviceId);
 
@@ -123,6 +134,17 @@ public class AuthServiceImpl implements AuthService {
                 .build();
     }
 
+    /**
+     * Kullanıcı girişi yapar.
+     * Rate limit, brute force, email doğrulama, cihaz/IP değişikliği kontrolleri yapar.
+     * Başarılı girişte token oluşturur, gerekirse email doğrulama kodu gönderir.
+     * 
+     * @param request Giriş isteği
+     * @param deviceId Cihaz ID'si
+     * @param ipAddress IP adresi
+     * @param deviceInfo Cihaz bilgisi
+     * @return AuthResponse (token'lar veya null)
+     */
     @Override
     @Transactional
     public AuthResponse login(LoginRequest request, String deviceId, String ipAddress, String deviceInfo) {
@@ -215,13 +237,13 @@ public class AuthServiceImpl implements AuthService {
             
             if (deviceChanged) {
                 needsVerification = true;
-                log.info("Device change detected for user: {}, oldDevice: {}, newDevice: {}", 
+                log.info("Kullanıcı için cihaz değişikliği tespit edildi: {}, eski cihaz: {}, yeni cihaz: {}", 
                         user.getEmail(), oldDeviceId, deviceId);
             } else {
                 boolean ipChanged = !ipControlService.validateIpChange(oldIpAddress, ipAddress);
                 if (ipChanged && !"Unknown".equals(oldIpAddress) && !"Unknown".equals(ipAddress)) {
                     needsVerification = true;
-                    log.info("IP change detected for user: {}, oldIP: {}, newIP: {}", 
+                    log.info("Kullanıcı için IP değişikliği tespit edildi: {}, eski IP: {}, yeni IP: {}", 
                             user.getEmail(), oldIpAddress, ipAddress);
                 }
             }
@@ -237,14 +259,14 @@ public class AuthServiceImpl implements AuthService {
                         java.util.Date accessTokenExpiration = new java.util.Date(
                                 System.currentTimeMillis() + jwtService.getAccessTokenExpiration());
                         addToBlacklist(refreshToken.getAccessTokenJti(), accessTokenExpiration, "DEVICE_IP_CHANGE");
-                        log.info("Old access token blacklisted due to device/IP change: {}", refreshToken.getAccessTokenJti());
+                        log.info("Cihaz/IP değişikliği nedeniyle eski access token blacklist'e eklendi: {}", refreshToken.getAccessTokenJti());
                     } catch (Exception e) {
-                        log.warn("Failed to blacklist old access token: {}", e.getMessage());
+                        log.warn("Eski access token blacklist'e eklenemedi: {}", e.getMessage());
                     }
                 }
                 
                 refreshTokenService.deleteByUser(user);
-                log.info("Old refresh token deleted due to device/IP change for user: {}, old jti: {}", 
+                log.info("Cihaz/IP değişikliği nedeniyle eski refresh token silindi, kullanıcı: {}, eski jti: {}", 
                         user.getEmail(), refreshToken.getJti());
             }
             
@@ -293,7 +315,7 @@ public class AuthServiceImpl implements AuthService {
                 .success(true)
                 .build());
 
-        log.info("User logged in: {}", user.getEmail());
+        log.info("Kullanıcı giriş yaptı: {}", user.getEmail());
 
         return AuthResponse.builder()
                 .accessToken(accessToken)
@@ -303,6 +325,15 @@ public class AuthServiceImpl implements AuthService {
                 .build();
     }
 
+    /**
+     * Refresh token ile yeni access ve refresh token çifti oluşturur.
+     * Token rotasyonu yapar: eski token'ları blacklist'e ekler, yeni token'lar oluşturur.
+     * 
+     * @param refreshToken Mevcut refresh token
+     * @param deviceId Cihaz ID'si
+     * @param ipAddress IP adresi
+     * @return Yeni token'lar ile AuthResponse
+     */
     @Override
     @Transactional
     public AuthResponse refreshToken(String refreshToken, String deviceId, String ipAddress) {
@@ -339,9 +370,9 @@ public class AuthServiceImpl implements AuthService {
                 java.util.Date oldAccessTokenExpiration = new java.util.Date(
                         System.currentTimeMillis() + jwtService.getAccessTokenExpiration());
                 addToBlacklist(oldRefreshTokenEntity.getAccessTokenJti(), oldAccessTokenExpiration, "TOKEN_REFRESH");
-                log.debug("Old access token blacklisted: {}", oldRefreshTokenEntity.getAccessTokenJti());
+                log.debug("Eski access token blacklist'e eklendi: {}", oldRefreshTokenEntity.getAccessTokenJti());
             } catch (Exception e) {
-                log.warn("Failed to blacklist old access token: {}", e.getMessage());
+                log.warn("Eski access token blacklist'e eklenemedi: {}", e.getMessage());
             }
         }
 
@@ -375,7 +406,7 @@ public class AuthServiceImpl implements AuthService {
                 .details("Token rotated: old jti=" + oldRefreshTokenEntity.getJti() + ", new jti=" + newRefreshTokenJti)
                 .build());
         
-        log.info("Token refreshed and rotated for user: {}, old jti: {}, new jti: {}", 
+        log.info("Token yenilendi ve rotasyon yapıldı, kullanıcı: {}, eski jti: {}, yeni jti: {}", 
                 email, oldRefreshTokenEntity.getJti(), newRefreshTokenJti);
 
         return AuthResponse.builder()
@@ -386,6 +417,14 @@ public class AuthServiceImpl implements AuthService {
                 .build();
     }
 
+    /**
+     * Kullanıcı çıkışı yapar.
+     * Access token'ı blacklist'e ekler, refresh token'ı siler.
+     * 
+     * @param request Logout isteği (kullanılmıyor)
+     * @param email Kullanıcı email'i
+     * @param accessToken Access token (opsiyonel)
+     */
     @Override
     @Transactional
     public void logout(LogoutRequest request, String email, String accessToken) {
@@ -407,9 +446,9 @@ public class AuthServiceImpl implements AuthService {
                 java.util.Date accessTokenExpiration = new java.util.Date(
                         System.currentTimeMillis() + jwtService.getAccessTokenExpiration());
                 addToBlacklist(refreshTokenEntity.getAccessTokenJti(), accessTokenExpiration, "LOGOUT");
-                log.debug("Access token blacklisted: {}", refreshTokenEntity.getAccessTokenJti());
+                log.debug("Access token blacklist'e eklendi: {}", refreshTokenEntity.getAccessTokenJti());
             } catch (Exception e) {
-                log.warn("Failed to blacklist access token: {}", e.getMessage());
+                log.warn("Access token blacklist'e eklenemedi: {}", e.getMessage());
             }
         }
 
@@ -418,18 +457,18 @@ public class AuthServiceImpl implements AuthService {
                 String accessTokenJti = jwtService.extractJti(accessToken);
                 java.util.Date accessTokenExpiration = jwtService.extractExpiration(accessToken);
                 addToBlacklist(accessTokenJti, accessTokenExpiration, "LOGOUT");
-                log.debug("Request access token blacklisted: {}", accessTokenJti);
+                log.debug("İstek access token'ı blacklist'e eklendi: {}", accessTokenJti);
             } catch (Exception e) {
-                log.warn("Failed to blacklist request access token: {}", e.getMessage());
+                log.warn("İstek access token'ı blacklist'e eklenemedi: {}", e.getMessage());
             }
         }
 
         if (refreshTokenEntity != null) {
             refreshTokenService.deleteByUser(user);
-            log.info("Logout completed for user: {}, refreshToken jti: {}", 
+            log.info("Çıkış tamamlandı, kullanıcı: {}, refreshToken jti: {}", 
                     email, refreshTokenEntity.getJti());
         } else {
-            log.warn("No refresh token found for user: {}", email);
+            log.warn("Kullanıcı için refresh token bulunamadı: {}", email);
         }
 
         securityAuditService.logEvent(SecurityAuditService.SecurityEvent.builder()
@@ -441,6 +480,13 @@ public class AuthServiceImpl implements AuthService {
                 .build());
     }
 
+    /**
+     * Token'ı blacklist'e ekler.
+     * 
+     * @param jti Token JTI'si
+     * @param expiresAt Token sona erme tarihi
+     * @param reason Blacklist'e ekleme nedeni
+     */
     private void addToBlacklist(String jti, java.util.Date expiresAt, String reason) {
         TokenBlacklist blacklistEntry = new TokenBlacklist();
         blacklistEntry.setJti(jti);

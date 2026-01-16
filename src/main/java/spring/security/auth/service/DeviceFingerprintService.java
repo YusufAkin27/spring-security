@@ -13,6 +13,13 @@ import java.util.Base64;
 @Service
 public class DeviceFingerprintService {
 
+    /**
+     * İstekten cihaz ID'si oluşturur.
+     * User-Agent, IP adresi ve Accept-Language bilgilerini kullanır.
+     * 
+     * @param request HTTP istek nesnesi
+     * @return Cihaz ID'si (SHA-256 hash)
+     */
     public String generateDeviceId(HttpServletRequest request) {
         String userAgent = request.getHeader("User-Agent");
         if (userAgent == null || userAgent.isEmpty()) {
@@ -33,7 +40,7 @@ public class DeviceFingerprintService {
             byte[] hash = digest.digest(fingerprint.getBytes(StandardCharsets.UTF_8));
             String deviceId = Base64.getUrlEncoder().withoutPadding().encodeToString(hash);
             
-            log.debug("Device fingerprint generated: {} (from UA: {}, IP: {})", 
+            log.debug("Cihaz fingerprint oluşturuldu: {} (UA: {}, IP: {})", 
                     deviceId.substring(0, Math.min(16, deviceId.length())), 
                     userAgent.substring(0, Math.min(50, userAgent.length())), 
                     ipAddress);
@@ -67,6 +74,12 @@ public class DeviceFingerprintService {
         return "Unknown";
     }
 
+    /**
+     * İstekten cihaz bilgisini çıkarır (tarayıcı ve işletim sistemi).
+     * 
+     * @param request HTTP istek nesnesi
+     * @return Cihaz bilgisi string'i
+     */
     public String extractDeviceInfo(HttpServletRequest request) {
         String userAgent = request.getHeader("User-Agent");
         if (userAgent == null || userAgent.isEmpty()) {

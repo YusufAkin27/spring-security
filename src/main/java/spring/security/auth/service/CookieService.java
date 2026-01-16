@@ -30,6 +30,12 @@ public class CookieService {
     @Value("${jwt.refresh-token-expiration:604800000}")
     private long refreshTokenExpiration;
 
+    /**
+     * Refresh token'ı HTTP-only cookie olarak ayarlar.
+     * 
+     * @param response HTTP yanıt nesnesi
+     * @param token Refresh token
+     */
     public void setRefreshTokenCookie(HttpServletResponse response, String token) {
         int maxAge = (int) (refreshTokenExpiration / 1000);
 
@@ -43,10 +49,16 @@ public class CookieService {
 
         response.addHeader("Set-Cookie", cookie.toString());
 
-        log.debug("Refresh token cookie set: name={}, path={}, httpOnly={}, secure={}, sameSite={}, maxAge={}s", 
+        log.debug("Refresh token cookie ayarlandı: name={}, path={}, httpOnly={}, secure={}, sameSite={}, maxAge={}s", 
                 cookieName, cookiePath, cookieHttpOnly, cookieSecure, cookieSameSite, maxAge);
     }
 
+    /**
+     * Cookie'den refresh token'ı okur.
+     * 
+     * @param request HTTP istek nesnesi
+     * @return Refresh token veya null
+     */
     public String getRefreshTokenFromCookie(HttpServletRequest request) {
         Cookie[] cookies = request.getCookies();
         if (cookies == null) {
@@ -56,15 +68,20 @@ public class CookieService {
         for (Cookie cookie : cookies) {
             if (cookieName.equals(cookie.getName())) {
                 String token = cookie.getValue();
-                log.debug("Refresh token read from cookie: {}", token != null ? "present" : "null");
+                log.debug("Refresh token cookie'den okundu: {}", token != null ? "mevcut" : "null");
                 return token;
             }
         }
 
-        log.debug("Refresh token cookie not found: {}", cookieName);
+        log.debug("Refresh token cookie bulunamadı: {}", cookieName);
         return null;
     }
 
+    /**
+     * Refresh token cookie'sini temizler (silir).
+     * 
+     * @param response HTTP yanıt nesnesi
+     */
     public void clearRefreshTokenCookie(HttpServletResponse response) {
         ResponseCookie cookie = ResponseCookie.from(cookieName, "")
                 .path(cookiePath)
@@ -76,6 +93,6 @@ public class CookieService {
 
         response.addHeader("Set-Cookie", cookie.toString());
 
-        log.debug("Refresh token cookie cleared: name={}, path={}, sameSite={}", cookieName, cookiePath, cookieSameSite);
+        log.debug("Refresh token cookie temizlendi: name={}, path={}, sameSite={}", cookieName, cookiePath, cookieSameSite);
     }
 }

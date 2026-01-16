@@ -1,8 +1,8 @@
-package spring.security.user.service;
+    package spring.security.user.service;
 
-import spring.security.user.dto.UserResponse;
+    import spring.security.user.dto.UserResponse;
 
-public interface UserService {
+    public interface UserService {
 
-    UserResponse getProfile(String email);
-}
+        UserResponse getProfile(String email);
+    }

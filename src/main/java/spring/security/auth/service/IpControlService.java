@@ -15,6 +15,13 @@ public class IpControlService {
     @Value("${security.ip-control.subnet-check}")
     private boolean subnetCheckEnabled;
 
+    /**
+     * İstekten IP adresini çıkarır.
+     * X-Forwarded-For, X-Real-IP ve RemoteAddr header'larını kontrol eder.
+     * 
+     * @param request HTTP istek nesnesi
+     * @return IP adresi veya "Unknown"
+     */
     public String extractIpAddress(HttpServletRequest request) {
         String xForwardedFor = request.getHeader("X-Forwarded-For");
         if (xForwardedFor != null && !xForwardedFor.isEmpty()) {
@@ -35,7 +42,7 @@ public class IpControlService {
             return remoteAddr;
         }
 
-        log.warn("Could not extract valid IP address from request");
+        log.warn("İstekten geçerli IP adresi çıkarılamadı");
         return "Unknown";
     }
 
@@ -62,6 +69,14 @@ public class IpControlService {
         }
     }
 
+    /**
+     * İki IP adresinin aynı subnet'te olup olmadığını kontrol eder.
+     * İlk 3 octet'i karşılaştırır.
+     * 
+     * @param ip1 İlk IP adresi
+     * @param ip2 İkinci IP adresi
+     * @return Aynı subnet'te ise true
+     */
     public boolean isSameSubnet(String ip1, String ip2) {
         if (ip1 == null || ip2 == null || ip1.isEmpty() || ip2.isEmpty()) {
             return false;
@@ -72,7 +87,7 @@ public class IpControlService {
         }
 
         if (!subnetCheckEnabled) {
-            log.debug("Subnet check disabled, IPs considered different: {} vs {}", ip1, ip2);
+            log.debug("Subnet kontrolü devre dışı, IP'ler farklı kabul edildi: {} vs {}", ip1, ip2);
             return false;
         }
 
@@ -86,51 +101,59 @@ public class IpControlService {
 
             for (int i = 0; i < 3; i++) {
                 if (!parts1[i].equals(parts2[i])) {
-                    log.debug("IPs in different subnets: {} vs {}", ip1, ip2);
+                    log.debug("IP'ler farklı subnet'lerde: {} vs {}", ip1, ip2);
                     return false;
                 }
             }
 
-            log.debug("IPs in same subnet: {} vs {}", ip1, ip2);
+            log.debug("IP'ler aynı subnet'te: {} vs {}", ip1, ip2);
             return true;
         } catch (Exception e) {
-            log.warn("Error comparing IPs: {} vs {}, error: {}", ip1, ip2, e.getMessage());
+            log.warn("IP karşılaştırma hatası: {} vs {}, hata: {}", ip1, ip2, e.getMessage());
             return false;
         }
     }
 
+    /**
+     * IP değişikliğini doğrular.
+     * IP kontrolü aktifse, aynı IP veya aynı subnet kontrolü yapar.
+     * 
+     * @param originalIp Orijinal IP adresi
+     * @param currentIp Mevcut IP adresi
+     * @return IP değişikliği kabul edilebilirse true
+     */
     public boolean validateIpChange(String originalIp, String currentIp) {
         if (!ipControlEnabled) {
-            log.debug("IP control disabled, IP change allowed");
+            log.debug("IP kontrolü devre dışı, IP değişikliği izinli");
             return true;
         }
 
         if (originalIp == null || originalIp.isEmpty() || "Unknown".equals(originalIp)) {
-            log.debug("Original IP unknown, allowing IP change");
+            log.debug("Orijinal IP bilinmiyor, IP değişikliği izinli");
             return true;
         }
 
         if (currentIp == null || currentIp.isEmpty() || "Unknown".equals(currentIp)) {
-            log.warn("Current IP unknown, rejecting request");
+            log.warn("Mevcut IP bilinmiyor, istek reddedildi");
             return false;
         }
 
         if (originalIp.equals(currentIp)) {
-            log.debug("IPs match exactly: {}", currentIp);
+            log.debug("IP'ler tam olarak eşleşiyor: {}", currentIp);
             return true;
         }
 
         if (subnetCheckEnabled) {
             boolean sameSubnet = isSameSubnet(originalIp, currentIp);
             if (sameSubnet) {
-                log.debug("IPs in same subnet: {} vs {}", originalIp, currentIp);
+                log.debug("IP'ler aynı subnet'te: {} vs {}", originalIp, currentIp);
                 return true;
             } else {
-                log.warn("IP change detected (different subnet): {} -> {}", originalIp, currentIp);
+                log.warn("IP değişikliği tespit edildi (farklı subnet): {} -> {}", originalIp, currentIp);
                 return false;
             }
         } else {
-            log.warn("IP change detected: {} -> {}", originalIp, currentIp);
+            log.warn("IP değişikliği tespit edildi: {} -> {}", originalIp, currentIp);
             return false;
         }
     }

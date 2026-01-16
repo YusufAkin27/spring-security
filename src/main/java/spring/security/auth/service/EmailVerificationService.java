@@ -29,6 +29,15 @@ public class EmailVerificationService {
 
     private static final SecureRandom random = new SecureRandom();
 
+    /**
+     * Email doğrulama kodu oluşturur ve gönderir.
+     * 
+     * @param user Kullanıcı
+     * @param type Doğrulama tipi (REGISTRATION, LOGIN_VERIFICATION)
+     * @param ipAddress IP adresi
+     * @param deviceId Cihaz ID'si
+     * @return Oluşturulan doğrulama kodu
+     */
     @Transactional
     public String generateAndSendVerificationCode(User user, String type, String ipAddress, String deviceId) {
         String code = generateCode();
@@ -48,7 +57,7 @@ public class EmailVerificationService {
 
         emailService.sendVerificationCode(user.getEmail(), code, type);
 
-        log.info("Verification code generated for user: {}, type: {}", user.getEmail(), type);
+        log.info("Doğrulama kodu oluşturuldu, kullanıcı: {}, tip: {}", user.getEmail(), type);
         return code;
     }
 
@@ -56,6 +65,14 @@ public class EmailVerificationService {
         return emailVerificationRepository.findByCodeAndUsedFalseAndExpiresAtAfter(code, now);
     }
 
+    /**
+     * Doğrulama kodunu kontrol eder ve doğrular.
+     * 
+     * @param code Doğrulama kodu
+     * @param user Kullanıcı
+     * @param type Doğrulama tipi
+     * @return Doğrulama başarılı ise true
+     */
     @Transactional
     public boolean verifyCode(String code, User user, String type) {
         LocalDateTime now = LocalDateTime.now();
@@ -64,19 +81,19 @@ public class EmailVerificationService {
                 .findByCodeAndUsedFalseAndExpiresAtAfter(code, now);
 
         if (verificationOpt.isEmpty()) {
-            log.warn("Invalid or expired verification code: {}", code);
+            log.warn("Geçersiz veya süresi dolmuş doğrulama kodu: {}", code);
             return false;
         }
 
         EmailVerification verification = verificationOpt.get();
 
         if (!verification.getUser().getId().equals(user.getId())) {
-            log.warn("Verification code user mismatch: code={}, user={}", code, user.getEmail());
+            log.warn("Doğrulama kodu kullanıcı uyuşmazlığı: kod={}, kullanıcı={}", code, user.getEmail());
             return false;
         }
 
         if (!type.equals(verification.getType())) {
-            log.warn("Verification code type mismatch: code={}, expected={}, actual={}", 
+            log.warn("Doğrulama kodu tip uyuşmazlığı: kod={}, beklenen={}, gerçek={}", 
                     code, type, verification.getType());
             return false;
         }
@@ -84,7 +101,7 @@ public class EmailVerificationService {
         verification.setUsed(true);
         emailVerificationRepository.save(verification);
 
-        log.info("Verification code verified successfully for user: {}, type: {}", user.getEmail(), type);
+        log.info("Doğrulama kodu başarıyla doğrulandı, kullanıcı: {}, tip: {}", user.getEmail(), type);
         return true;
     }
 
@@ -96,10 +113,13 @@ public class EmailVerificationService {
         return code.toString();
     }
 
+    /**
+     * Süresi dolmuş doğrulama kodlarını temizler.
+     */
     @Transactional
     public void cleanupExpiredVerifications() {
         LocalDateTime now = LocalDateTime.now();
         emailVerificationRepository.deleteByExpiresAtBefore(now);
-        log.debug("Expired email verifications cleaned up");
+        log.debug("Süresi dolmuş email doğrulamaları temizlendi");
     }
 }

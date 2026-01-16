@@ -31,6 +31,12 @@ public class BruteForceProtectionService {
 
     private final Map<String, FailedAttemptRecord> failedAttempts = new ConcurrentHashMap<>();
 
+    /**
+     * Başarısız giriş denemesini kaydeder.
+     * Belirli sayıda başarısız denemeden sonra hesabı geçici veya kalıcı olarak kilitler.
+     * 
+     * @param email Kullanıcı email'i
+     */
     @Transactional
     public void recordFailedAttempt(String email) {
         FailedAttemptRecord record = failedAttempts.get(email);
@@ -39,24 +45,24 @@ public class BruteForceProtectionService {
         if (record == null) {
             record = new FailedAttemptRecord(1, now, false);
             failedAttempts.put(email, record);
-            log.warn("Failed login attempt #1 for user: {}", email);
+            log.warn("Başarısız giriş denemesi #1 - kullanıcı: {}", email);
         } else {
             int newCount = record.getAttemptCount() + 1;
             boolean isPermanentlyLocked = record.isPermanentlyLocked();
 
             if (isPermanentlyLocked) {
-                log.warn("Permanently locked account login attempt: {}", email);
+                log.warn("Kalıcı olarak kilitlenmiş hesap giriş denemesi: {}", email);
                 return;
             }
 
             if (record.getLockedUntil() != null && record.getLockedUntil().isAfter(now)) {
-                log.warn("Temporarily locked account login attempt: {} (locked until: {})", 
+                log.warn("Geçici olarak kilitlenmiş hesap giriş denemesi: {} (kilitlenme bitiş: {})", 
                         email, record.getLockedUntil());
                 return;
             }
 
             if (record.getLockedUntil() != null && record.getLockedUntil().isBefore(now)) {
-                log.info("Temporary lock expired for user: {}, resetting counter", email);
+                log.info("Geçici kilit süresi doldu, kullanıcı: {}, sayaç sıfırlanıyor", email);
                 record = new FailedAttemptRecord(1, now, false);
                 failedAttempts.put(email, record);
             } else {
@@ -66,7 +72,7 @@ public class BruteForceProtectionService {
             if (newCount >= maxFailedAttempts && newCount < permanentLockThreshold) {
                 LocalDateTime lockedUntil = now.plusMinutes(temporaryLockMinutes);
                 record = new FailedAttemptRecord(newCount, now, false, lockedUntil);
-                log.warn("Account temporarily locked for user: {} ({} failed attempts, locked until: {})", 
+                log.warn("Hesap geçici olarak kilitlendi, kullanıcı: {} ({} başarısız deneme, kilitlenme bitiş: {})", 
                         email, newCount, lockedUntil);
             }
 
@@ -75,16 +81,22 @@ public class BruteForceProtectionService {
                 userRepository.findByEmail(email).ifPresent(user -> {
                     user.setEnabled(false);
                     userRepository.save(user);
-                    log.error("Account permanently locked for user: {} ({} failed attempts)", 
+                    log.error("Hesap kalıcı olarak kilitlendi, kullanıcı: {} ({} başarısız deneme)", 
                             email, newCount);
                 });
             }
 
             failedAttempts.put(email, record);
-            log.warn("Failed login attempt #{} for user: {}", newCount, email);
+            log.warn("Başarısız giriş denemesi #{} - kullanıcı: {}", newCount, email);
         }
     }
 
+    /**
+     * Hesabın kilitli olup olmadığını kontrol eder.
+     * 
+     * @param email Kullanıcı email'i
+     * @return Hesap kilitli ise true
+     */
     public boolean isAccountLocked(String email) {
         FailedAttemptRecord record = failedAttempts.get(email);
         if (record == null) {
@@ -92,19 +104,19 @@ public class BruteForceProtectionService {
         }
 
         if (record.isPermanentlyLocked()) {
-            log.warn("Account is permanently locked: {}", email);
+            log.warn("Hesap kalıcı olarak kilitli: {}", email);
             return true;
         }
 
         if (record.getLockedUntil() != null) {
             LocalDateTime now = LocalDateTime.now();
             if (record.getLockedUntil().isAfter(now)) {
-                log.warn("Account is temporarily locked: {} (locked until: {})", 
+                log.warn("Hesap geçici olarak kilitli: {} (kilitlenme bitiş: {})", 
                         email, record.getLockedUntil());
                 return true;
             } else {
                 failedAttempts.remove(email);
-                log.info("Temporary lock expired for user: {}", email);
+                log.info("Geçici kilit süresi doldu, kullanıcı: {}", email);
                 return false;
             }
         }
@@ -112,13 +124,22 @@ public class BruteForceProtectionService {
         return false;
     }
 
+    /**
+     * Başarılı girişi kaydeder ve başarısız deneme sayacını sıfırlar.
+     * 
+     * @param email Kullanıcı email'i
+     */
     public void recordSuccessfulLogin(String email) {
         FailedAttemptRecord record = failedAttempts.remove(email);
         if (record != null) {
-            log.info("Successful login for user: {}, failed attempts counter reset", email);
+            log.info("Başarılı giriş, kullanıcı: {}, başarısız deneme sayacı sıfırlandı", email);
         }
     }
 
+    /**
+     * Eski kayıtları temizler (24 saatten eski).
+     * Her saat başı otomatik çalışır.
+     */
     @Scheduled(fixedRate = 3600000)
     public void cleanupOldRecords() {
         LocalDateTime cutoff = LocalDateTime.now().minusHours(24);
@@ -134,7 +155,7 @@ public class BruteForceProtectionService {
         }
         
         if (cleaned > 0) {
-            log.debug("Brute force protection cleanup: {} old records removed", cleaned);
+            log.debug("Brute force koruma temizliği: {} eski kayıt silindi", cleaned);
         }
     }
 

@@ -17,6 +17,13 @@ public class EmailService {
     @Value("${spring.mail.from:no-reply@yusufakin.online}")
     private String fromEmail;
 
+    /**
+     * Doğrulama kodunu email ile gönderir.
+     * 
+     * @param toEmail Alıcı email adresi
+     * @param code Doğrulama kodu
+     * @param type Email tipi (REGISTRATION, LOGIN_VERIFICATION)
+     */
     public void sendVerificationCode(String toEmail, String code, String type) {
         try {
             SimpleMailMessage message = new SimpleMailMessage();
@@ -51,9 +58,9 @@ public class EmailService {
             }
 
             mailSender.send(message);
-            log.info("Verification email sent to: {}", toEmail);
+            log.info("Doğrulama email'i gönderildi: {}", toEmail);
         } catch (Exception e) {
-            log.error("Failed to send verification email to: {}", toEmail, e);
+            log.error("Doğrulama email'i gönderilemedi: {}", toEmail, e);
             throw new RuntimeException("Email gönderilemedi", e);
         }
     }
